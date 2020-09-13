@@ -5,15 +5,17 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Bundle;
 
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.snackbar.Snackbar;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -21,9 +23,11 @@ import android.view.View;
 
 import android.view.Menu;
 import android.view.MenuItem;
-import android.widget.ArrayAdapter;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ProgressBar;
+import android.widget.TextView;
+import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,18 +41,25 @@ public class MainActivity extends AppCompatActivity {
     private Context mContext;
     private List<String> deviceNames;
     private ProgressBar progressBar;
+    Button scanDevicesBtn;
+
+    private BottomSheetBehavior mBehavior;
+    private BottomSheetDialog mBottomSheetDialog;
+    private View bottom_sheet;
+    RecyclerView devicesRecyclerView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        Button scanDevicesBtn = findViewById(R.id.discover_devices);
-        RecyclerView devicesRecyclerView = findViewById(R.id.devicesRecyclerView);
+         devicesRecyclerView = findViewById(R.id.devicesRecyclerView);
         LinearLayoutManager linearLayoutManager = new LinearLayoutManager(mContext);
         devicesRecyclerView.setLayoutManager(linearLayoutManager);
         deviceNames = new ArrayList<>();
-        progressBar   = findViewById(R.id.progress);
+
+        bottom_sheet = findViewById(R.id.bottom_sheet);
+        mBehavior = BottomSheetBehavior.from(bottom_sheet);
 
         IntentFilter intent = new IntentFilter(BluetoothDevice.ACTION_FOUND);
         this.registerReceiver(broadcastReceiver,intent);
@@ -56,8 +67,22 @@ public class MainActivity extends AppCompatActivity {
         intent = new IntentFilter(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
         this.registerReceiver(broadcastReceiver,intent);
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        showBottomSheetDialog();
+    }
 
+
+    public void discoverDevices() {
+        if (progressBar.getVisibility() == View.GONE) {
+            progressBar.setVisibility(View.VISIBLE);
+        }
+        if(bluetoothAdapter.isDiscovering()){
+            bluetoothAdapter.cancelDiscovery();
+        }
+        bluetoothAdapter.startDiscovery();
         Set<BluetoothDevice> pairedDevice = bluetoothAdapter.getBondedDevices();
+        if(!deviceNames.isEmpty()){
+            deviceNames.clear();
+        }
         if(pairedDevice.size() > 0){
             for(BluetoothDevice bluetoothDevice : pairedDevice){
                 String blueToothInfo = bluetoothDevice.getName();
@@ -66,32 +91,12 @@ public class MainActivity extends AppCompatActivity {
         }else{
             deviceNames.add("No device Found");
         }
+        showBottomSheetDialog();
         DevicesArrayAdaptor devicesArrayAdaptor = new DevicesArrayAdaptor(deviceNames);
         devicesRecyclerView.setAdapter(devicesArrayAdaptor);
-        scanDevicesBtn.setOnClickListener(new View.OnClickListener() {
-
-            //setResult(Activity.RESULT_CANCELED);
-            @Override
-            public void onClick(View view) {
-                discoverDevices();
-
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
-            }
-        });
-
-    }
-
-
-    public void discoverDevices() {
-
-        if (progressBar.getVisibility() == View.GONE) {
-            progressBar.setVisibility(View.VISIBLE);
-        }
-        if(bluetoothAdapter.isDiscovering()){
-            bluetoothAdapter.cancelDiscovery();
-        }
-        bluetoothAdapter.startDiscovery();
+//        if (mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED) {
+//            mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+//        }
     }
 
 
@@ -112,7 +117,6 @@ public class MainActivity extends AppCompatActivity {
                         deviceNames.add(bluetoothDevice.getName());
                     }
                 }
-
             }else if(BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)){
                 progressBar.setVisibility(View.GONE);
                 if(deviceNames.size() == 0){
@@ -121,6 +125,47 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     };
+
+
+    private void showBottomSheetDialog() {
+        if (mBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED) {
+            mBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+        }
+        final View view = getLayoutInflater().inflate(R.layout.search_devices_bottom_sheet, null);
+        scanDevicesBtn = view.findViewById(R.id.discover_devices);
+        progressBar    = view.findViewById(R.id.progress);
+        scanDevicesBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                discoverDevices();
+                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
+                        .setAction("Action", null).show();
+            }
+        });
+
+        mBottomSheetDialog = new BottomSheetDialog(this);
+        mBottomSheetDialog.setContentView(view);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            mBottomSheetDialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+        }
+
+
+        mBottomSheetDialog.show();
+        mBottomSheetDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface dialog) {
+                mBottomSheetDialog = null;
+            }
+        });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mBehavior.getState() == BottomSheetBehavior.STATE_COLLAPSED) {
+            mBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+        }
+    }
 
     @Override
     protected void onDestroy() {
